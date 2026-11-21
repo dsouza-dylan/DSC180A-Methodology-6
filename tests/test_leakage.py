@@ -57,6 +57,21 @@ def test_rolling_mean_excludes_today(feats):
         assert feats.set_index("dteday").cnt_roll_7[date] == pytest.approx(expected)
 
 
+def test_temp_change_1_uses_yesterday_only(feats):
+    """temp_change_1 on date d is temp(d) - temp(d-1), in calendar days.
+
+    Expected values are hand-computed from data/raw/bike_daily.csv, not from
+    the feature code, so this cannot pass by construction.
+      2012-03-02: 8.606651 - 14.834151 (2012-03-01) = -6.2275
+      2011-03-12: 7.470849 - 6.876534  (2011-03-11) =  0.594315
+    2011-03-12 is the first kept row after the missing 2011-03-10, so it
+    checks the diff is taken on the calendar index right after the gap.
+    """
+    by_date = feats.set_index("dteday")
+    assert by_date.loc["2012-03-02", "temp_change_1"] == pytest.approx(-6.2275)
+    assert by_date.loc["2011-03-12", "temp_change_1"] == pytest.approx(0.594315)
+
+
 def test_no_missing_values(feats):
     assert feats[feature_columns(feats)].isna().sum().sum() == 0
 
