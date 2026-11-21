@@ -203,3 +203,80 @@ FAILED tests/test_leakage.py::test_encode_weather_rejects_unknown_labels - Fa...
 ### Turns to fix
 
 1
+
+## Exercise 2 (d): `cp` into `data/raw/` from Bash
+
+### What happened
+
+A copy of `data/raw/bike_daily.csv` with one label changed was copied over the raw file from Bash:
+
+```
+$ diff data/raw/bike_daily.csv /tmp/fault_d/bike_daily.csv
+666c666
+< 668,"2012-10-29","FALL","2012","OCT","N","MON",12.68,30.9396,88,23.9994,2,20,22,"Y","BAD",667,7852
+---
+> 668,"2012-10-29","FALL","2012","OCT","N","MON",12.68,30.9396,88,23.9994,2,20,22,"Y","STORMY",667,7852
+$ cp /tmp/fault_d/bike_daily.csv data/raw/bike_daily.csv
+```
+
+No hook ran. The hook is registered for `Edit|Write` only, and the `deny` rules for `data/raw/**` also cover only `Edit` and `Write`, not Bash.
+
+```
+$ git status
+On branch main
+Your branch is ahead of 'origin/main' by 6 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   data/raw/bike_daily.csv
+
+no changes added to commit (use "git add" and/or "git commit -a")
+```
+
+`make test` failed (13 identical setup errors; one shown in full, the rest
+cut):
+
+```
+$ make test
+python -m pytest tests/ -q
+.EE.EEEEEEEE.EEE                                                                             [100%]
+============================================= ERRORS ==============================================
+______________________ ERROR at setup of test_only_expected_rows_are_dropped ______________________
+[...]
+        known = series.dropna()
+        unknown = set(known.unique()) - set(WEATHER_ORDER)
+        if unknown:
+>           raise ValueError(f"unmapped weather labels: {sorted(unknown)}")
+E           ValueError: unmapped weather labels: ['STORMY']
+
+src\features.py:30: ValueError
+[...]
+===================================== short test summary info =====================================
+ERROR tests/test_contract.py::test_only_expected_rows_are_dropped - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_contract.py::test_beats_the_mean_baseline - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_leakage_identity_holds - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_no_forbidden_features - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_lags_are_true_calendar_lags - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_lag_is_not_the_target - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_rolling_mean_excludes_today - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_temp_change_1_uses_yesterday_only - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_no_missing_values - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_leakage.py::test_dates_are_sorted_and_unique - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_split.py::test_splits_non_empty - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_split.py::test_splits_are_ordered_in_time - ValueError: unmapped weather labels: ['STORMY']
+ERROR tests/test_split.py::test_no_overlapping_dates - ValueError: unmapped weather labels: ['STORMY']
+3 passed, 13 errors in 2.37s
+make: *** [Makefile:16: test] Error 1
+```
+
+Restored with `git checkout -- data/raw/bike_daily.csv`; `make test` then gave `16 passed`.
+
+### What would have caught it
+
+`make test` caught it because `STORMY` reaches the `raise` in
+`encode_weather`. With one `temp` value edited instead, all 16 tests pass.
+A test comparing the SHA-256 of `data/raw/bike_daily.csv` to a value in
+`src/config.py` would catch any change to the file. A `PreToolUse` hook on
+`Bash` that rejects commands writing to `data/raw/` would block the `cp`.
