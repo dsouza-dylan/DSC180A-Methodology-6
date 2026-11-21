@@ -67,6 +67,10 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Weather: measured same-day, available to a forecaster ----------
     out["weather_severity"] = encode_weather(out.weather)
+    # Day-over-day temperature change. Both terms are measured by the end of
+    # day d, the same availability as `temp`. diff() is row-based, so it must
+    # run on the calendar index: across the 2011-03-10 gap it yields NaN.
+    out["temp_change_1"] = out.temp.diff(1)
 
     # --- Lagged target: past values only. shift(1) is the whole ballgame;
     # without it, cnt_roll_7 would contain today's count. -----------------
