@@ -140,3 +140,66 @@ FAILED tests/test_leakage.py::test_rolling_mean_excludes_today - assert np.fl...
 ### Turns to fix
 
 1
+
+## Exercise 2 (c): `raise` removed from the weather encoder
+
+### Exact change
+
+`src/features.py`, `encode_weather()`:
+
+```diff
+-    known = series.dropna()
+-    unknown = set(known.unique()) - set(WEATHER_ORDER)
+-    if unknown:
+-        raise ValueError(f"unmapped weather labels: {sorted(unknown)}")
+     return series.map(WEATHER_ORDER).astype(float)
+```
+
+No existing test failed and the hook stayed silent, because the data has no
+unmapped labels and no test covered `encode_weather`:
+
+```
+$ python -m pytest tests/test_leakage.py -q --tb=line
+........                                                                 [100%]
+8 passed in 0.61s
+```
+
+Added `tests/test_leakage.py::test_encode_weather_rejects_unknown_labels`,
+then re-seeded the fault.
+
+### Red test output
+
+```
+$ python -m pytest tests/test_leakage.py -q --tb=line
+........F                                                                [100%]
+================================== FAILURES ===================================
+E   Failed: DID NOT RAISE ValueError
+c:\Users\dylan\Desktop\Classes\DSC180A\MA6\bikeshare-open\tests\test_leakage.py:86: Failed: DID NOT RAISE ValueError
+=========================== short test summary info ===========================
+FAILED tests/test_leakage.py::test_encode_weather_rejects_unknown_labels - Fa...
+1 failed, 8 passed in 0.72s
+```
+
+### Hook stderr
+
+```
+PostToolUse:Edit hook blocking error from command: "${CLAUDE_PROJECT_DIR}/.claude/hooks/check_leakage.sh": [${CLAUDE_PROJECT_DIR}/.claude/hooks/check_leakage.sh]: Leakage tests failed after editing c:/Users/dylan/Desktop/Classes/DSC180A/MA6/bikeshare-open/src/features.py:
+........F                                                                [100%]
+================================== FAILURES ===================================
+_________________ test_encode_weather_rejects_unknown_labels __________________
+
+    def test_encode_weather_rejects_unknown_labels():
+        """An unmapped label must raise, not silently become NaN and get dropped."""
+>       with pytest.raises(ValueError, match="unmapped weather labels"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_leakage.py:86: Failed
+=========================== short test summary info ===========================
+FAILED tests/test_leakage.py::test_encode_weather_rejects_unknown_labels - Fa...
+1 failed, 8 passed in 0.69s
+```
+
+### Turns to fix
+
+1
