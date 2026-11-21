@@ -12,6 +12,9 @@ set -uo pipefail
 payload=$(cat)
 path=$(printf '%s' "$payload" | python3 -c \
   'import json,sys; print(json.load(sys.stdin).get("tool_input",{}).get("file_path",""))')
+# Windows sends backslash paths (c:\...\src\features.py); normalise them so
+# the src/ match below does not silently skip every edit.
+path="${path//\\//}"
 
 case "$path" in
   *src/*.py) ;;
