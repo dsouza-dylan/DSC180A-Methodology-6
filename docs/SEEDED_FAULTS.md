@@ -77,7 +77,7 @@ FAILED tests/test_leakage.py::test_no_forbidden_features - AssertionError: fo...
 
 The hook did not fire on the first attempt: it matched `*src/*.py`, and
 Claude Code passes Windows paths with backslashes. Fixed in `f68e8f7`
-(`path="${path//\//}"`); the output above is from after that fix.
+(`path="${path//\\//}"`); the output above is from after that fix.
 
 ### Turns to fix
 
@@ -276,7 +276,20 @@ Restored with `git checkout -- data/raw/bike_daily.csv`; `make test` then gave `
 ### What would have caught it
 
 `make test` caught it because `STORMY` reaches the `raise` in
-`encode_weather`. With one `temp` value edited instead, all 16 tests pass.
+`encode_weather`. With one `temp` value edited instead, nothing fails:
+
+```
+$ diff data/raw/bike_daily.csv /tmp/fault_d/bike_daily.csv
+666c666
+< 668,"2012-10-29","FALL","2012","OCT","N","MON",12.68,30.9396,88,23.9994,2,20,22,"Y","BAD",667,7852
+---
+> 668,"2012-10-29","FALL","2012","OCT","N","MON",12.69,30.9396,88,23.9994,2,20,22,"Y","BAD",667,7852
+$ cp /tmp/fault_d/bike_daily.csv data/raw/bike_daily.csv
+$ make test
+................                                                         [100%]
+16 passed in 4.79s
+```
+
 A test comparing the SHA-256 of `data/raw/bike_daily.csv` to a value in
 `src/config.py` would catch any change to the file. A `PreToolUse` hook on
 `Bash` that rejects commands writing to `data/raw/` would block the `cp`.
