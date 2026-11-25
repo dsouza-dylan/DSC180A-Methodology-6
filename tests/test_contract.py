@@ -3,9 +3,9 @@ import pandas as pd
 import pytest
 from sklearn.metrics import r2_score
 
-from src.config import LAG_WARMUP, TARGET
+from src.config import LAG_WARMUP, RAW_SHA256, TARGET
 from src.features import build_features, feature_columns, reindex_to_calendar
-from src.ingest import load_raw
+from src.ingest import load_raw, raw_sha256
 from src.train import MODELS, temporal_split
 
 
@@ -17,6 +17,14 @@ def raw():
 @pytest.fixture(scope="module")
 def feats(raw):
     return build_features(raw)
+
+
+def test_raw_file_is_unchanged():
+    """data/raw/ is write-denied for Edit and Write but not for Bash, and the
+    PostToolUse hook never sees a `cp`. The hash is the only guard that does.
+    RAW_SHA256 is a literal in src/config.py, not computed from the file, so
+    this cannot pass by construction."""
+    assert raw_sha256() == RAW_SHA256, "data/raw/bike_daily.csv has changed"
 
 
 def test_calendar_is_complete_before_lagging(raw):

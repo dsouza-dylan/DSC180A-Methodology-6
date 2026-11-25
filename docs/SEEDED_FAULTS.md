@@ -293,3 +293,44 @@ $ make test
 A test comparing the SHA-256 of `data/raw/bike_daily.csv` to a value in
 `src/config.py` would catch any change to the file. A `PreToolUse` hook on
 `Bash` that rejects commands writing to `data/raw/` would block the `cp`.
+
+### Implemented: hash check in `make data`
+
+`RAW_SHA256` in `src/config.py` holds the file's SHA-256 as a literal.
+`src.ingest.verify_raw()` runs in `make data` and raises if the file differs;
+`tests/test_contract.py::test_raw_file_is_unchanged` makes `make test` go red
+too. The hash is taken after normalising CRLF to LF: with `core.autocrlf=true`
+a Windows checkout writes CRLF, and a plain `git checkout` restore does exactly
+that, which a raw-byte hash would reject.
+
+The check is not in `load_raw()`, so the other tests still run and fail for
+their own reasons when the file changes.
+
+Re-seeded with the one-value edit above, which passed every test before:
+
+```
+$ cp /tmp/fault_d/bike_daily.csv data/raw/bike_daily.csv
+$ make data
+python -m src.ingest
+    raise ValueError(
+ValueError: bike_daily.csv has changed: sha256 01d7202d08d13d23..., expected a6bed1577f6e4de5... Restore it with `git checkout -- data/raw/bike_daily.csv`.
+make: *** [Makefile:7: data] Error 1
+$ make test
+python -m pytest tests/ -q
+E       AssertionError: data/raw/bike_daily.csv has changed
+E       assert '01d7202d08d1...268046590e11c' == 'a6bed1577f6e...0c86a0b5ad9dc'
+E         
+E         - a6bed1577f6e4de56dcfae6d8315985073cc0ad3446c8c99ed60c86a0b5ad9dc
+E         + 01d7202d08d13d23b34433f4b6b156fcfc1ce7aa1e5fd7b5ba1268046590e11c
+FAILED tests/test_contract.py::test_raw_file_is_unchanged - AssertionError: d...
+1 failed, 16 passed in 1.88s
+make: *** [Makefile:16: test] Error 1
+```
+
+Restored; `make data` printed
+`OK ingest: 728 rows, 2011-01-03 -> 2012-12-31, sha256 a6bed1577f6e4de5` and
+`make test` gave `17 passed`. A CRLF copy of the unchanged file also passes
+`make data`.
+
+It detects the change; it does not block the `cp`. Blocking would need the
+`PreToolUse` hook on `Bash`.

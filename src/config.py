@@ -20,6 +20,11 @@ DATA_URL = (
     "interpretable-ml-book/master/data/bike.csv"
 )
 
+# SHA-256 of the checked-in raw file. data/raw/ is write-denied for Edit and
+# Write, but not for Bash: a `cp` over the file passes every permission rule
+# and the PostToolUse hook. src/ingest.py refuses to run if this changes.
+RAW_SHA256 = "a6bed1577f6e4de56dcfae6d8315985073cc0ad3446c8c99ed60c86a0b5ad9dc"
+
 TARGET = "cnt"
 
 # --- Three reasons a column is kept out of the feature set --------------
