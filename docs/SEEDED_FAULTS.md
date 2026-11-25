@@ -306,6 +306,97 @@ that, which a raw-byte hash would reject.
 The check is not in `load_raw()`, so the other tests still run and fail for
 their own reasons when the file changes.
 
+The change (commit `1ef6b45`):
+
+```diff
+--- a/src/config.py
++++ b/src/config.py
+@@ -20,6 +20,11 @@ DATA_URL = (
+     "interpretable-ml-book/master/data/bike.csv"
+ )
+ 
++# SHA-256 of the checked-in raw file. data/raw/ is write-denied for Edit and
++# Write, but not for Bash: a `cp` over the file passes every permission rule
++# and the PostToolUse hook. src/ingest.py refuses to run if this changes.
++RAW_SHA256 = "a6bed1577f6e4de56dcfae6d8315985073cc0ad3446c8c99ed60c86a0b5ad9dc"
++
+ TARGET = "cnt"
+--- a/src/ingest.py
++++ b/src/ingest.py
+@@ -1,13 +1,14 @@
+-"""Stage 1: fetch the raw dataset and assert its shape.
++"""Stage 1: fetch the raw dataset, verify its hash, and assert its shape.
+ 
+ Run: python -m src.ingest
+ """
++import hashlib
+ import sys
+ import urllib.request
+ 
+ import pandas as pd
+ 
+-from src.config import DATA_URL, RAW
++from src.config import DATA_URL, RAW, RAW_SHA256
+@@ -20,6 +21,30 @@ def download(force: bool = False) -> None:
+     urllib.request.urlretrieve(DATA_URL, RAW)
+ 
+ 
++def raw_sha256() -> str:
++    """SHA-256 of the raw file with line endings normalised to LF.
++
++    Git with core.autocrlf=true checks the CSV out with CRLF on Windows,
++    which changes the bytes but not the data. Normalising first means a
++    fresh Windows clone matches RAW_SHA256 and any real edit still does not.
++    """
++    return hashlib.sha256(RAW.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
++
++
++def verify_raw() -> None:
++    """Fail loudly if the raw file is not the one the results were built on.
++
++    Shape checks in load_raw() miss a single edited value: one changed
++    `temp` keeps every column and row and passes all the other tests.
++    """
++    actual = raw_sha256()
++    if actual != RAW_SHA256:
++        raise ValueError(
++            f"{RAW.name} has changed: sha256 {actual[:16]}..., expected {RAW_SHA256[:16]}... "
++            "Restore it with `git checkout -- data/raw/bike_daily.csv`."
++        )
++
++
+ def load_raw() -> pd.DataFrame:
+@@ -32,5 +57,6 @@ def load_raw() -> pd.DataFrame:
+ 
+ if __name__ == "__main__":
+     download(force="--force" in sys.argv)
++    verify_raw()
+     df = load_raw()
+-    print(f"OK ingest: {len(df)} rows, {df.dteday.min().date()} -> {df.dteday.max().date()}")
++    print(f"OK ingest: {len(df)} rows, {df.dteday.min().date()} -> {df.dteday.max().date()}, sha256 {RAW_SHA256[:16]}")
+--- a/tests/test_contract.py
++++ b/tests/test_contract.py
+@@ -3,9 +3,9 @@
+-from src.config import LAG_WARMUP, TARGET
++from src.config import LAG_WARMUP, RAW_SHA256, TARGET
+ from src.features import build_features, feature_columns, reindex_to_calendar
+-from src.ingest import load_raw
++from src.ingest import load_raw, raw_sha256
+@@ -19,6 +19,14 @@ def feats(raw):
+     return build_features(raw)
+ 
+ 
++def test_raw_file_is_unchanged():
++    """data/raw/ is write-denied for Edit and Write but not for Bash, and the
++    PostToolUse hook never sees a `cp`. The hash is the only guard that does.
++    RAW_SHA256 is a literal in src/config.py, not computed from the file, so
++    this cannot pass by construction."""
++    assert raw_sha256() == RAW_SHA256, "data/raw/bike_daily.csv has changed"
++
++
+ def test_calendar_is_complete_before_lagging(raw):
+```
+
 Re-seeded with the one-value edit above, which passed every test before:
 
 ```
