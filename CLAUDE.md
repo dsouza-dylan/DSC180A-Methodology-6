@@ -4,11 +4,15 @@ Daily Capital Bikeshare counts, 2011-2012. We forecast `cnt` (total daily
 rides) from calendar, weather, and lagged-demand features.
 
 ## Commands
-- `make data` - download raw CSV and assert its shape
+- `make data` - verify the raw CSV's hash and assert its shape
 - `make features` - build `data/processed/features.parquet`
 - `make train` - fit models, write `reports/metrics.json`
 - `make test` - pytest; run this before claiming anything works
-- `make all` - the three pipeline stages in order
+- `make all` - the three pipeline stages in order. It reproduces
+  `reports/metrics.json`, the source of every number in `REPORT.md`;
+  re-run it and commit the result after any code change.
+- `/new-feature <name>` adds a feature with its test; `/ablation <feature>`
+  measures what one feature adds on validation.
 
 ## Non-negotiable rules
 - **Never** put `casual` or `registered` in a feature set:
@@ -17,9 +21,16 @@ rides) from calendar, weather, and lagged-demand features.
   for each. Derive feature lists from `FORBIDDEN`; never hand-type them.
 - **Never** split this data randomly. Use `src.train.temporal_split`.
   Train = 2011, valid = H1 2012, test = H2 2012. Never tune on test.
-- Any new lag or rolling feature must be built on a gap-free calendar
-  index (`src.features.reindex_to_calendar`) and must `.shift(1)` before
-  it aggregates. Add a test for it in `tests/test_leakage.py`.
+- Any new lag, rolling, or difference feature (like `temp_change_1`) must
+  be built on a gap-free calendar index (`src.features.reindex_to_calendar`)
+  and must `.shift(1)` before it aggregates. Add a test for it in
+  `tests/test_leakage.py`.
+- `data/raw/bike_daily.csv` is immutable. If `make data` reports a hash
+  mismatch, restore it with `git checkout`; **never** update `RAW_SHA256`.
+- A new raw column goes into one of the classification sets in
+  `src/config.py`, with its reason, before anything uses it.
+- `python -m src.train --diff-roll7` is the Exercise 4 experiment and only
+  prints. Never make it the default or put its numbers in `metrics.json`.
 - Report the mean baseline **and** the persistence baseline (yesterday's
   count) alongside every model. A negative R^2 is a finding, not a bug
   to hide.
@@ -39,3 +50,6 @@ rides) from calendar, weather, and lagged-demand features.
   cannot extrapolate to 2012. That is the headline result, not an error.
 - 2012-10-29 (Hurricane Sandy, 22 rides) is in the test set. Expect it in
   any residual plot.
+- The PostToolUse hook needs the `.venv` Python. If it prints "Python was
+  not found" or "No module named pytest", the venv is not active: say so,
+  and do not treat the edit as passing.
